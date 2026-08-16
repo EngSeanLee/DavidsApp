@@ -1,0 +1,9 @@
+{
+  "name": "davidsapp-mock-api",
+  "private": true,
+  "description": "Mock of the Apps Script doPost JSON envelope contract, for MAUI client development. Zero dependencies on purpose.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

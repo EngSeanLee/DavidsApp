@@ -1,16 +1,51 @@
 # src/client
 
-.NET MAUI client (`net10.0-android`, `net10.0-windows10.0.19041.0`).
+.NET MAUI client. Two projects:
 
-Not yet scaffolded — Phase 2 of the build plan:
+- **`DavidsApp.Client.Core`** (`net10.0`, no MAUI dependency) — `Models/`, `Services/Api/`
+  (`IApiClient`/`ApiClient`), `Services/StateMachine/` (`CaptureStateMachine`), and the
+  `IContinuousSpeechRecognizer` interface. Split out from the MAUI app specifically so it's
+  unit-testable without the Android/Windows workloads — see `DavidsApp.Client.Core.Tests`.
+- **`DavidsApp.Client`** (`net10.0-android` + `net10.0-windows10.0.19041.0`) — the actual MAUI
+  app: UI, DI wiring (`MauiProgram.cs`), and platform-specific speech recognizer implementations
+  under `Platforms/`.
 
-1. `dotnet new maui -n DavidsApp.Client -o .`
-2. Add `Models/` (`Finding`, `Project`, `ApiEnvelope`, `ApiStatus`) matching
-   [`../../docs/api-contract.md`](../../docs/api-contract.md)
-3. `Services/Api/{IApiClient,ApiClient}.cs` — point at `../../tools/mock-api` during development, swap
-   to the real Apps Script deployment URL once Phase 1 is live (config-driven, not hardcoded)
-4. `Services/StateMachine/CaptureStateMachine.cs` implementing
-   [`../../docs/state-machine.md`](../../docs/state-machine.md) — unit-test the missing-field routing
-   rule independent of speech/UI
-5. `Services/Speech/IContinuousSpeechRecognizer.cs` + platform implementations — see
-   `docs/decisions/0001-continuous-stt-approach.md`
+## Status: Phase 2 in progress
+
+Done:
+- Both projects scaffolded and building clean for both targets (`dotnet build -f net10.0-android`,
+  `dotnet build -f net10.0-windows10.0.19041.0`)
+- Full data model (`Models/`) matching [`../../docs/api-contract.md`](../../docs/api-contract.md)
+- `ApiClient` — posts the `{apiKey, action, payload}` envelope, never throws (network/deserialize
+  failures come back as a `Status.Error` envelope, same code path as a real backend error)
+- `CaptureStateMachine` implementing [`../../docs/state-machine.md`](../../docs/state-machine.md)
+  end to end, including the missing-field routing invariant, Pause/Resume, and SpeechFailed/Retry
+  — see `DavidsApp.Client.Core.Tests` (14 tests, including one live against a running
+  `tools/mock-api`)
+- Wired to `tools/mock-api` by default (`MauiProgram.cs` — see `ApiClientOptions`)
+
+Not yet done:
+- UI (still the MAUI template's default `MainPage`) — capture screen, state indicators, project
+  select/start
+- `Services/Speech` platform implementations (Android `SpeechRecognizer` wrapper, Windows
+  `ContinuousRecognitionSession`) — interface exists in Core, nothing implements it yet
+- Wiring the real deployed Apps Script URL (currently mock-only) — swap `ApiClientOptions` via a
+  gitignored local config once needed; never hardcode the real URL/secret here (repo is public)
+
+## Build & test
+
+```
+# Core logic — fast, no workload/emulator needed
+dotnet test src/client/DavidsApp.Client.Core.Tests
+
+# Client, either target
+dotnet build src/client/DavidsApp.Client.csproj -f net10.0-windows10.0.19041.0
+dotnet build src/client/DavidsApp.Client.csproj -f net10.0-android
+```
+
+Run the mock API first (`node tools/mock-api/server.js`) to exercise the client against something
+live, or to run `ApiClientMockServerTests` (skips cleanly if nothing's listening).
+
+**Note:** `CommunityToolkit.Maui` is pinned to `13.0.0`, not latest — newer versions need
+`Microsoft.Maui.Controls >= 10.0.60`, but the `maui-windows` workload installed here is at
+`10.0.20`. Revisit after a `dotnet workload update`.

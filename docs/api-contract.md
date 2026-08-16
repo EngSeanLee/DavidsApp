@@ -95,11 +95,16 @@ than one field is missing — client keeps routing here until `confirm`).
 Also OpenAI-backed; stubbed until a key exists.
 
 ### `resolveVocabulary`
-**payload →** `{ projectId, category, rawValue, accepted, normalizedValue? }`
+**payload →** `{ projectId, category, rawValue, accepted, normalizedValue?, pendingRowSoFar }`
 `category` is one of `ROOM | POS | COLOR | SUBSTRATE | COMPONENT` (dynamic) — `STATE` is closed and
-never reaches this action. If `accepted` is true, appends a new `Settings` row
-(`Type=category, Value=rawValue, Normalized=normalizedValue`) so it's recognized going forward.
-**data ←** `{ pendingRow: { ... } }` — the finding continues from where it left off.
+never reaches this action; it maps 1:1 to the matching `pendingRow` field (`room`, `pos`, `color`,
+`substrate`, `component`). If `accepted` is true, appends a new `Settings` row
+(`Type=category, Value=rawValue, Normalized=normalizedValue`) so it's recognized going forward, and
+sets that field on `pendingRowSoFar` to the normalized value; if `accepted` is false, the field is
+left unset and `message` prompts for a replacement value.
+**data ←** `{ pendingRow: { ... } }` — the finding continues from where it left off (client passes
+`pendingRowSoFar` back in on the next `parseFinding`/`resolveMissingField` call the same way it does
+today, per `docs/state-machine.md`).
 Does not require OpenAI — pure Sheets read/write.
 
 ### `saveFinding`

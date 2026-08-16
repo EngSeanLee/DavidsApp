@@ -39,3 +39,12 @@ function listProjects(_payload) {
   var projects = rows.map(projectRowToEnvelope_);
   return confirmEnvelope_({ projects: projects }, projects.length + ' project(s).');
 }
+
+/** Raw Projects sheet row (header-keyed, not the camelCase envelope shape) for a given ProjectID, or null. Used by Report.js. */
+function findProjectRowById_(projectId) {
+  var rows = readAllRows_(SHEET_NAMES.PROJECTS);
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i]['ProjectID'] === projectId) return rows[i];
+  }
+  return null;
+}

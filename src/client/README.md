@@ -3,34 +3,66 @@
 .NET MAUI client. Two projects:
 
 - **`DavidsApp.Client.Core`** (`net10.0`, no MAUI dependency) — `Models/`, `Services/Api/`
-  (`IApiClient`/`ApiClient`), `Services/StateMachine/` (`CaptureStateMachine`), and the
-  `IContinuousSpeechRecognizer` interface. Split out from the MAUI app specifically so it's
+  (`IApiClient`/`ApiClient`), `Services/StateMachine/` (`CaptureStateMachine`,
+  `SpeechStateIndicator`), `Services/Speech/` (`IContinuousSpeechRecognizer`,
+  `ITextToSpeechService`, `CommandWordDetector`), and `ViewModels/`
+  (`ProjectListViewModel`, `CaptureViewModel`). Split out from the MAUI app specifically so it's
   unit-testable without the Android/Windows workloads — see `DavidsApp.Client.Core.Tests`.
-- **`DavidsApp.Client`** (`net10.0-android` + `net10.0-windows10.0.19041.0`) — the actual MAUI
-  app: UI, DI wiring (`MauiProgram.cs`), and platform-specific speech recognizer implementations
-  under `Platforms/`.
+- **`DavidsApp.Client`** (`net10.0-android` + `net10.0-windows10.0.19041.0`) — the MAUI app:
+  `Views/` (XAML pages), `MauiProgram.cs` (DI wiring, incl. platform-conditional speech
+  recognizer registration), and `Platforms/{Android,Windows}/Speech/` (the two
+  `IContinuousSpeechRecognizer` implementations).
 
-## Status: Phase 2 in progress
+## Status: Phase 2 complete
 
-Done:
-- Both projects scaffolded and building clean for both targets (`dotnet build -f net10.0-android`,
-  `dotnet build -f net10.0-windows10.0.19041.0`)
-- Full data model (`Models/`) matching [`../../docs/api-contract.md`](../../docs/api-contract.md)
-- `ApiClient` — posts the `{apiKey, action, payload}` envelope, never throws (network/deserialize
-  failures come back as a `Status.Error` envelope, same code path as a real backend error)
-- `CaptureStateMachine` implementing [`../../docs/state-machine.md`](../../docs/state-machine.md)
-  end to end, including the missing-field routing invariant, Pause/Resume, and SpeechFailed/Retry
-  — see `DavidsApp.Client.Core.Tests` (14 tests, including one live against a running
-  `tools/mock-api`)
+- Both projects build clean for both targets, zero warnings
+  (`dotnet build -f net10.0-android`, `dotnet build -f net10.0-windows10.0.19041.0`)
+- Full data model, `ApiClient`, and `CaptureStateMachine` — see prior status notes; 34 tests in
+  `DavidsApp.Client.Core.Tests` (33 unit + 1 live mock-server integration), all passing
+- **`ProjectListPage`** (start/resume a project) → **`CapturePage`** (status indicator, pending-row
+  preview, save/cancel/delete-last/repeat, mic toggle, and a manual-entry fallback that routes
+  through the exact same `CaptureViewModel` pipeline as real speech)
+- `CaptureViewModel` wires `CaptureStateMachine` + `IContinuousSpeechRecognizer` +
+  `ITextToSpeechService` + `CommandWordDetector` together: command-phrase detection before
+  content routing, TTS/STT mute coordination (spec §5.3 — mic never listens while the app talks),
+  a two-step cancel debounce, and yes/no parsing for the unknown-vocabulary flow
+- **Actually run and driven end-to-end on Windows** (via UI Automation, not just built) — full
+  Idle → Confirm → Saved → Idle cycle through the real UI, real `ApiClient`, and `tools/mock-api`,
+  confirmed by screenshot at each step
+- Android/Windows `IContinuousSpeechRecognizer` implementations exist and compile — see the
+  caveat below
 - Wired to `tools/mock-api` by default (`MauiProgram.cs` — see `ApiClientOptions`)
 
-Not yet done:
-- UI (still the MAUI template's default `MainPage`) — capture screen, state indicators, project
-  select/start
-- `Services/Speech` platform implementations (Android `SpeechRecognizer` wrapper, Windows
-  `ContinuousRecognitionSession`) — interface exists in Core, nothing implements it yet
+### A crash found and fixed during this pass
+
+Running the app for real (not just building it) surfaced a genuine bug: `CapturePage.OnAppearing`
+is `async void` (an unavoidable MAUI lifecycle constraint), and it called the Windows speech
+recognizer's startup unguarded. On this dev machine, Windows speech recognition isn't fully set up
+(no enrolled recognition language), so `StartListeningAsync` threw — and an unhandled exception in
+an `async void` chain is fatal to the *entire process*, not just that screen. Fixed by wrapping the
+recognizer startup in `CaptureViewModel.InitializeAsync` in a try/catch that degrades to
+manual-entry-only instead of crashing, plus defense-in-depth try/catch around the `async void`
+lifecycle methods themselves in `CapturePage`/`ProjectListPage`. Confirmed fixed by re-running the
+same UI Automation sequence that originally crashed it.
+
+### Known caveat: speech recognizers are unverified on-device
+
+`Platforms/Android/Speech/AndroidContinuousSpeechRecognizer.cs` and
+`Platforms/Windows/Speech/WindowsContinuousSpeechRecognizer.cs` compile clean but **the actual
+continuous-listening behavior has not been verified** — no Android emulator/device and no
+configured Windows speech recognition were available in the environment this was built in (the
+crash above is direct evidence of the latter). Per
+[`../../docs/decisions/0001-continuous-stt-approach.md`](../../docs/decisions/0001-continuous-stt-approach.md),
+expect this to need real on-device iteration, especially the Android restart-on-silence-timeout
+loop.
+
+## Not yet done
+
+- Physical remote button (deferred per earlier decision)
+- Structured diagnostic logging to a persistent store (currently `ILogger` only)
 - Wiring the real deployed Apps Script URL (currently mock-only) — swap `ApiClientOptions` via a
   gitignored local config once needed; never hardcode the real URL/secret here (repo is public)
+- Report generation UI (backend action itself is still stubbed too — Phase 4)
 
 ## Build & test
 

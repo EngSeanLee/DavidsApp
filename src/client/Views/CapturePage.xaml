@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage
+    x:Class="DavidsApp.Client.Views.CapturePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:DavidsApp.Client.ViewModels"
+    x:DataType="vm:CaptureViewModel"
+    Title="Capture">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="14">
+
+            <Border Padding="12" Stroke="Gray">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Status" FontSize="12" TextColor="Gray" />
+                    <Label Text="{Binding StatusIndicator}" FontSize="22" FontAttributes="Bold" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding LiveTranscriptPreview}" FontAttributes="Italic" TextColor="Gray" />
+
+            <Border Padding="12" Stroke="LightGray">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Pending finding" FontSize="12" TextColor="Gray" />
+                    <Label Text="{Binding PendingRowSummary}" LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding LastMessage}" FontAttributes="Bold" />
+            <Label Text="{Binding LastSavedSummary}" FontSize="12" TextColor="Gray" />
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                <Button Grid.Column="0" Text="{Binding IsMicMuted, StringFormat='Mic: {0}'}" Command="{Binding ToggleMicCommand}" />
+                <Button Grid.Column="1" Text="Repeat" Command="{Binding RepeatCommand}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                <Button Grid.Column="0" Text="Save" Command="{Binding ConfirmSaveCommand}" BackgroundColor="DarkGreen" TextColor="White" />
+                <Button Grid.Column="1" Text="Cancel" Command="{Binding CancelCommand}" BackgroundColor="DarkRed" TextColor="White" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                <Button Grid.Column="0" Text="Yes, add it" Command="{Binding AcceptVocabularyCommand}" />
+                <Button Grid.Column="1" Text="No, retry" Command="{Binding RejectVocabularyCommand}" />
+            </Grid>
+
+            <Button Text="Delete Last Finding" Command="{Binding DeleteLastCommand}" />
+
+            <BoxView HeightRequest="1" Color="LightGray" Margin="0,10" />
+
+            <Label Text="Manual entry (speech fallback)" FontSize="12" TextColor="Gray" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <Entry Grid.Column="0" Placeholder="Type a finding or response…" Text="{Binding ManualEntryText}" />
+                <Button Grid.Column="1" Text="Send" Command="{Binding SubmitManualEntryCommand}" />
+            </Grid>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

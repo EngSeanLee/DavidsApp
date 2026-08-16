@@ -59,9 +59,14 @@ public sealed class WindowsContinuousSpeechRecognizer : IContinuousSpeechRecogni
     public async Task StopListeningAsync()
     {
         if (_recognizer is null) return;
+        var wasListening = IsListening;
+        // Set before awaiting StopAsync, not after — session hygiene per spec §5.3 ("reset
+        // between sessions"): OnSessionCompleted's restart-loop guard checks IsListening, so this
+        // must already read false for the duration of the stop, not just once it's finished.
+        IsListening = false;
         try
         {
-            if (IsListening)
+            if (wasListening)
             {
                 await _recognizer.ContinuousRecognitionSession.StopAsync();
             }
@@ -77,7 +82,6 @@ public sealed class WindowsContinuousSpeechRecognizer : IContinuousSpeechRecogni
             _recognizer.HypothesisGenerated -= OnHypothesisGenerated;
             _recognizer.Dispose();
             _recognizer = null;
-            IsListening = false;
         }
     }
 

@@ -13,7 +13,7 @@
   recognizer registration), and `Platforms/{Android,Windows}/Speech/` (the two
   `IContinuousSpeechRecognizer` implementations).
 
-## Status: Phase 2 complete
+## Status: Phase 2 complete + speech hardening (build plan steps 4, 7)
 
 - Both projects build clean for both targets, zero warnings
   (`dotnet build -f net10.0-android`, `dotnet build -f net10.0-windows10.0.19041.0`)
@@ -56,13 +56,33 @@ crash above is direct evidence of the latter). Per
 expect this to need real on-device iteration, especially the Android restart-on-silence-timeout
 loop.
 
+### Speech hardening + diagnostic logging (added after the initial UI pass)
+
+- **`IDiagnosticLog`** (Core) / **`FileDiagnosticLog`** (MAUI, NDJSON to `FileSystem.AppDataDirectory`)
+  — persists timestamp/projectId/action/status/errorCode/pendingRow/lastSavedRow per build plan
+  step 7. Raw STT transcripts are logged as their own `raw_stt` event, separate from the parsed
+  outcome (spec §5.3) — confirmed on a real run: manual entry correctly does *not* produce a
+  `raw_stt` entry, since that event is specifically about speech-recognized text.
+- **Session hygiene fixes on both recognizers** (spec §5.3 "stop/reset the previous recognition
+  session before starting a new one"): Android now detaches its `RecognitionListener` *before*
+  stopping/cancelling/destroying the old session (previously did it after — a queued callback
+  could otherwise fire against a session already being discarded and spawn a duplicate restart);
+  Windows now flips `IsListening` to false before awaiting `StopAsync()` rather than after, so the
+  `Completed` handler's restart guard can't race a call already in flight.
+- 6 new `CaptureViewModel`-level tests (`FakeSpeechRecognizer`/`FakeTextToSpeechService`/
+  `FakeDiagnosticLog`), including a direct regression guard for the async-void crash described
+  above, plus coverage for diagnostic logging, voice-command interception, the manual/voice shared
+  routing pipeline, and the cancel debounce. 39 tests total.
+- Re-ran the full Windows UI Automation sequence after these changes and confirmed the diagnostic
+  log file's actual on-disk contents matched expectations.
+
 ## Not yet done
 
 - Physical remote button (deferred per earlier decision)
-- Structured diagnostic logging to a persistent store (currently `ILogger` only)
 - Wiring the real deployed Apps Script URL (currently mock-only) — swap `ApiClientOptions` via a
   gitignored local config once needed; never hardcode the real URL/secret here (repo is public)
 - Report generation UI (backend action itself is still stubbed too — Phase 4)
+- End-to-end regression testing across the full scenario list in the build plan (build plan step 9)
 
 ## Build & test
 

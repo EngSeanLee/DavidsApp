@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Maui;
 using DavidsApp.Client.Services;
 using DavidsApp.Client.Services.Api;
+using DavidsApp.Client.Services.Diagnostics;
 using DavidsApp.Client.Services.Speech;
 using DavidsApp.Client.Services.StateMachine;
 using DavidsApp.Client.ViewModels;
@@ -42,6 +43,7 @@ public static class MauiProgram
 		builder.Services.AddTransient<CaptureStateMachine>();
 
 		builder.Services.AddSingleton<ITextToSpeechService, MauiTextToSpeechService>();
+		builder.Services.AddSingleton<IDiagnosticLog, FileDiagnosticLog>();
 #if ANDROID
 		builder.Services.AddSingleton<IContinuousSpeechRecognizer, AndroidContinuousSpeechRecognizer>();
 #elif WINDOWS

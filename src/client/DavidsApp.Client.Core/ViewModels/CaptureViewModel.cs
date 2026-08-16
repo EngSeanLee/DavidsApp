@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DavidsApp.Client.Models;
 using DavidsApp.Client.Services.Api;
+using DavidsApp.Client.Services.Diagnostics;
 using DavidsApp.Client.Services.Speech;
 using DavidsApp.Client.Services.StateMachine;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,7 @@ public sealed partial class CaptureViewModel : ObservableObject
     private readonly IApiClient _api;
     private readonly IContinuousSpeechRecognizer _recognizer;
     private readonly ITextToSpeechService _tts;
+    private readonly IDiagnosticLog _diagnosticLog;
     private readonly ILogger<CaptureViewModel> _logger;
 
     private bool _pendingCancelConfirmation;
@@ -31,12 +33,14 @@ public sealed partial class CaptureViewModel : ObservableObject
         IApiClient api,
         IContinuousSpeechRecognizer recognizer,
         ITextToSpeechService tts,
+        IDiagnosticLog diagnosticLog,
         ILogger<CaptureViewModel> logger)
     {
         _stateMachine = stateMachine;
         _api = api;
         _recognizer = recognizer;
         _tts = tts;
+        _diagnosticLog = diagnosticLog;
         _logger = logger;
 
         _stateMachine.StateChanged += (_, state) => RefreshFromState(state);
@@ -45,11 +49,12 @@ public sealed partial class CaptureViewModel : ObservableObject
 
         _recognizer.FinalResult += OnFinalResult;
         _recognizer.PartialResult += (_, text) => LiveTranscriptPreview = text;
-        _recognizer.Error += (_, message) =>
+        _recognizer.Error += async (_, message) =>
         {
             _logger.LogWarning("Speech recognizer error: {Message}", message);
             StatusIndicator = SpeechStateIndicator.SpeechFailed;
             LastMessage = "Speech recognition failed. You can still type findings manually.";
+            await LogDiagnosticAsync("recognizer_error", message: message);
         };
     }
 
@@ -162,11 +167,11 @@ public sealed partial class CaptureViewModel : ObservableObject
     [RelayCommand]
     private Task ConfirmSaveAsync() =>
         _stateMachine.State == CaptureState.Confirm
-            ? RunAndSpeakAsync(() => _stateMachine.ConfirmSaveAsync())
+            ? RunAndSpeakAsync(() => _stateMachine.ConfirmSaveAsync(), "saveFinding")
             : SpeakAsync("Nothing ready to save yet.");
 
     [RelayCommand]
-    private Task DeleteLastAsync() => RunAndSpeakAsync(() => _stateMachine.DeleteLastAsync());
+    private Task DeleteLastAsync() => RunAndSpeakAsync(() => _stateMachine.DeleteLastAsync(), "deleteLastFinding");
 
     [RelayCommand]
     private void Cancel()
@@ -178,13 +183,13 @@ public sealed partial class CaptureViewModel : ObservableObject
     [RelayCommand]
     private Task AcceptVocabularyAsync() =>
         _stateMachine.State == CaptureState.UnknownVocabulary
-            ? RunAndSpeakAsync(() => _stateMachine.SubmitVocabularyResolutionAsync(accepted: true))
+            ? RunAndSpeakAsync(() => _stateMachine.SubmitVocabularyResolutionAsync(accepted: true), "resolveVocabulary")
             : Task.CompletedTask;
 
     [RelayCommand]
     private Task RejectVocabularyAsync() =>
         _stateMachine.State == CaptureState.UnknownVocabulary
-            ? RunAndSpeakAsync(() => _stateMachine.SubmitVocabularyResolutionAsync(accepted: false))
+            ? RunAndSpeakAsync(() => _stateMachine.SubmitVocabularyResolutionAsync(accepted: false), "resolveVocabulary")
             : Task.CompletedTask;
 
     [RelayCommand]
@@ -198,8 +203,10 @@ public sealed partial class CaptureViewModel : ObservableObject
     private async void OnFinalResult(object? sender, string transcript)
     {
         // Raw STT text logged separately from parsed output, per spec §5.3 — isolates
-        // recognition errors from parsing errors when debugging a field report.
+        // recognition errors from parsing errors when debugging a field report. Logged before
+        // any parsing/command-detection happens, so it's captured even if handling throws.
         _logger.LogInformation("Raw STT transcript: {Transcript}", transcript);
+        await LogDiagnosticAsync("raw_stt", rawTranscript: transcript);
         try
         {
             await HandleFinalTranscriptAsync(transcript);
@@ -207,12 +214,18 @@ public sealed partial class CaptureViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error processing transcript: {Transcript}", transcript);
+            await LogDiagnosticAsync("unhandled_error", rawTranscript: transcript, message: ex.Message);
         }
     }
 
     private async Task HandleFinalTranscriptAsync(string transcript)
     {
         var command = CommandWordDetector.Detect(transcript);
+        if (command != VoiceCommand.None)
+        {
+            await LogDiagnosticAsync("voice_command", rawTranscript: transcript, action: command.ToString());
+        }
+
         switch (command)
         {
             case VoiceCommand.Pause:
@@ -234,7 +247,7 @@ public sealed partial class CaptureViewModel : ObservableObject
             case VoiceCommand.Save:
                 if (_stateMachine.State == CaptureState.Confirm)
                 {
-                    await RunAndSpeakAsync(() => _stateMachine.ConfirmSaveAsync());
+                    await RunAndSpeakAsync(() => _stateMachine.ConfirmSaveAsync(), "saveFinding");
                 }
                 else
                 {
@@ -256,8 +269,11 @@ public sealed partial class CaptureViewModel : ObservableObject
                 break;
 
             case CaptureState.Idle:
+                await RunAndSpeakAsync(() => _stateMachine.SubmitTranscriptAsync(transcript), "parseFinding");
+                break;
+
             case CaptureState.MissingField:
-                await RunAndSpeakAsync(() => _stateMachine.SubmitTranscriptAsync(transcript));
+                await RunAndSpeakAsync(() => _stateMachine.SubmitTranscriptAsync(transcript), "resolveMissingField");
                 break;
 
             case CaptureState.Confirm:
@@ -314,16 +330,57 @@ public sealed partial class CaptureViewModel : ObservableObject
             return;
         }
 
-        await RunAndSpeakAsync(() => _stateMachine.SubmitVocabularyResolutionAsync(accepted.Value));
+        await RunAndSpeakAsync(() => _stateMachine.SubmitVocabularyResolutionAsync(accepted.Value), "resolveVocabulary");
     }
 
-    private async Task RunAndSpeakAsync(Func<Task> action)
+    private async Task RunAndSpeakAsync(Func<Task> action, string actionName)
     {
         StatusIndicator = SpeechStateIndicator.Processing;
         await action();
         LastMessage = _stateMachine.LastMessage ?? string.Empty;
         RefreshFromState(_stateMachine.State);
+
+        await LogDiagnosticAsync(
+            "api_call",
+            action: actionName,
+            status: _stateMachine.State.ToString(),
+            errorCode: _stateMachine.LastErrorCode,
+            pendingRow: _stateMachine.PendingRow,
+            lastSavedRow: _stateMachine.LastSavedRow,
+            message: LastMessage);
+
         await SpeakAsync(LastMessage);
+    }
+
+    /// <summary>Never throws — a logging failure must not break the interaction it's describing.</summary>
+    private async Task LogDiagnosticAsync(
+        string eventType,
+        string? rawTranscript = null,
+        string? action = null,
+        string? status = null,
+        string? errorCode = null,
+        FindingRow? pendingRow = null,
+        FindingRow? lastSavedRow = null,
+        string? message = null)
+    {
+        try
+        {
+            await _diagnosticLog.LogAsync(new DiagnosticLogEntry(
+                Timestamp: DateTimeOffset.Now,
+                EventType: eventType,
+                ProjectId: _stateMachine.ActiveProjectId,
+                RawTranscript: rawTranscript,
+                Action: action,
+                Status: status,
+                ErrorCode: errorCode,
+                PendingRowSummary: pendingRow is not null ? Summarize(pendingRow) : null,
+                LastSavedRowSummary: lastSavedRow is not null ? Summarize(lastSavedRow) : null,
+                Message: message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Diagnostic logging failed (non-fatal).");
+        }
     }
 
     private void RefreshFromState(CaptureState state)

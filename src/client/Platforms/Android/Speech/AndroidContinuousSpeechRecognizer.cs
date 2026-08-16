@@ -112,20 +112,25 @@ public sealed class AndroidContinuousSpeechRecognizer : Java.Lang.Object, IConti
     private void TeardownCurrentSession()
     {
         if (_recognizer is null) return;
+        var recognizer = _recognizer;
+        _recognizer = null;
+
+        // Detach the listener FIRST, before stopping/cancelling/destroying — this is the session
+        // hygiene spec §5.3 calls for ("stop/reset the previous recognition session before
+        // starting a new one"). Android's Handler-based callback dispatch means a result/error for
+        // this session could already be queued; detaching the listener up front, rather than
+        // after Destroy(), is what actually stops a stale callback from firing RestartIfStillListening()
+        // against a session we've already discarded and potentially spawning a duplicate one.
         try
         {
-            _recognizer.StopListening();
-            _recognizer.Cancel();
-            _recognizer.Destroy();
+            recognizer.SetRecognitionListener(null);
+            recognizer.StopListening();
+            recognizer.Cancel();
+            recognizer.Destroy();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error tearing down SpeechRecognizer session (usually harmless).");
-        }
-        finally
-        {
-            _recognizer.SetRecognitionListener(null);
-            _recognizer = null;
         }
     }
 

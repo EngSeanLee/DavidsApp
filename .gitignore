@@ -1,0 +1,23 @@
+# .NET / MAUI
+**/bin/
+**/obj/
+*.user
+.vs/
+**/Platforms/Android/local.properties
+
+# Node / clasp / mock-api
+node_modules/
+.clasprc.json
+.clasp-credentials.json
+*.log
+npm-debug.log*
+
+# Secrets — never commit these
+.env
+**/secrets.json
+appsscript-secrets.json
+**/appsettings.local.json
+
+# OS cruft
+.DS_Store
+Thumbs.db

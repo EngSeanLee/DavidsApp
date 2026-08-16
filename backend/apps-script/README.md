@@ -3,7 +3,7 @@
 Google Apps Script backend, managed via [`clasp`](https://github.com/google/clasp). Implements the
 JSON envelope contract in [`../../docs/api-contract.md`](../../docs/api-contract.md).
 
-## Status: Phase 1 + Phase 4 complete
+## Status: Phases 1, 3, and 4 complete — all 9 actions live
 
 Bound to a Google Sheet + Apps Script project under `eng.lee785@gmail.com`, deployed as a Web App
 (Execute as: Me, Who has access: Anyone), schema bootstrapped, and smoke-tested end-to-end.
@@ -14,14 +14,21 @@ Bound to a Google Sheet + Apps Script project under `eng.lee785@gmail.com`, depl
   `deleteLastFinding`), `Vocabulary.js` (`resolveVocabulary`) — CRUD actions (all done)
 - `Report.js`'s `generateReport` — **done**: builds a Google Doc (project header + findings table
   grouped by Room) via `DocumentApp`, exports to PDF via `DriveApp`, sets the PDF to "anyone with
-  the link can view" (the MAUI client has no Google auth of its own), returns the Drive URL. Needed
-  its own OAuth consent grant beyond Phase 1's (Drive/Docs scopes) — see the version-3 deployment.
+  the link can view" (the MAUI client has no Google auth of its own), returns the Drive URL.
   Verified end-to-end: live curl call against the deployed Web App, PDF opened and visually checked.
-- `Findings.js`'s `parseFinding` / `resolveMissingField` — **stubbed**, need `src/OpenAiClient.js` and
-  an `OPENAI_API_KEY` script property (Phase 3, blocked on the user obtaining a key)
+- `AiClient.js` + `Findings.js`'s `parseFinding` / `resolveMissingField` — **done**, via Google
+  Gemini (not OpenAI — see `docs/decisions/0003-gemini-instead-of-openai.md` for why, and for a
+  detailed account of getting a brand-new, very-recently-launched API working: the endpoint shape,
+  two real model-quality bugs found and fixed, all with a verified trail). Full extraction,
+  shorthand ("same reading 1.2"), missing-field, and unknown-vocabulary paths all verified live
+  against the deployed Web App.
 - `STATE` vocabulary (`Vocabulary.js`) is seeded with a **placeholder default**
   (`Intact` / `Fair` / `Poor`) — the spec never enumerated exact values; confirm/edit before relying
   on it for real inspections.
+
+Both OAuth consent grants (Drive/Docs for reports, external-request for Gemini) needed granting
+beyond Phase 1's original Sheets-only consent — see the version history in **Deploy → Manage
+deployments** (currently Version 4).
 
 The live deployment URL and the `SHARED_SECRET` script property value are **not committed** (this repo
 is public — see `docs/decisions/0002-auth-and-secrets.md`). Get them from the Apps Script project's

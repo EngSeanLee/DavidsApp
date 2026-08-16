@@ -2,7 +2,7 @@
  * generateReport — Phase 4. See docs/api-contract.md and the locked defaults in the build spec
  * §7: on-demand trigger, DocumentApp builds a Google Doc (header + findings table grouped by
  * Room), exported to PDF via DriveApp, returned as a shareable Drive link. Independent of the
- * OpenAI key.
+ * Gemini key.
  */
 
 var FINDINGS_TABLE_COLUMNS_ = ['Wall', 'POS', 'Color', 'Substrate', 'State', 'Component Details', 'Reading'];

@@ -1,6 +1,6 @@
 /**
- * resolveVocabulary + shared vocabulary lookups used by both the CRUD-only actions here and,
- * later, by parseFinding/resolveMissingField (Phase 3, OpenAI-backed).
+ * resolveVocabulary + shared vocabulary lookups used by both the CRUD-only actions here and by
+ * parseFinding/resolveMissingField (Gemini-backed — see AiClient.js).
  *
  * See docs/api-contract.md and spec §3 for the ROOM/POS/COLOR/SUBSTRATE/COMPONENT (dynamic,
  * user-extensible via Settings) vs STATE (fixed, closed) split.
@@ -35,6 +35,22 @@ function isKnownVocabularyValue_(category, value) {
   return settingsRows.some(function (r) {
     return String(r['Value']).trim().toLowerCase() === normalized || String(r['Normalized']).trim().toLowerCase() === normalized;
   });
+}
+
+/** Unique known values for a dynamic category (Normalized form), for feeding to AiClient.js as context. */
+function knownVocabularyValues_(category) {
+  var seen = {};
+  var values = [];
+  readAllRows_(SHEET_NAMES.SETTINGS)
+    .filter(function (r) { return r['Type'] === category; })
+    .forEach(function (r) {
+      var normalized = String(r['Normalized'] || r['Value']).trim();
+      if (normalized && !seen[normalized.toLowerCase()]) {
+        seen[normalized.toLowerCase()] = true;
+        values.push(normalized);
+      }
+    });
+  return values;
 }
 
 function resolveVocabulary(payload) {

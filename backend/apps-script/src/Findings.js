@@ -1,7 +1,7 @@
 /**
- * getLastSavedRow, saveFinding, deleteLastFinding (CRUD — no OpenAI needed), plus
- * parseFinding / resolveMissingField (STUBBED — need backend/apps-script/src/OpenAiClient.js,
- * built in Phase 3 once an OpenAI API key exists). See docs/api-contract.md.
+ * getLastSavedRow, saveFinding, deleteLastFinding (CRUD), plus parseFinding /
+ * resolveMissingField (AI-backed via AiClient.js / Gemini — see
+ * docs/decisions/0003-gemini-instead-of-openai.md). See docs/api-contract.md.
  */
 
 var REQUIRED_FINDING_FIELDS_ = ['room', 'wall', 'pos', 'color', 'substrate', 'state', 'component', 'reading'];
@@ -119,15 +119,52 @@ function deleteLastFinding(payload) {
 }
 
 /**
- * STUB — needs backend/apps-script/src/OpenAiClient.js (Phase 3). Until an OpenAI API key is
- * configured (PropertiesService script property OPENAI_API_KEY), this always returns
- * not_configured so the client's mock-API path can be used for realistic end-to-end testing.
+ * Builds the appropriate response envelope for a candidate (possibly incomplete) finding row —
+ * shared by parseFinding and resolveMissingField, since both end up needing the same
+ * confirm/missing_field/unknown_value decision once Gemini has done its extraction.
  */
-function parseFinding(_payload) {
-  return errorEnvelope_('not_configured', 'parseFinding needs an OpenAI API key — not yet configured. See docs/decisions/ and backend/apps-script/README.md.');
+function respondForCandidateRow_(row) {
+  var validation = validateFindingRow_(row);
+  if (validation.ok) {
+    return confirmEnvelope_({ pendingRow: row }, 'Parsed finding.');
+  }
+  if (validation.unknownVocabulary) {
+    return unknownValueEnvelope_(validation.category, row[validation.field], row, 'Unrecognized ' + validation.field + ': "' + row[validation.field] + '". Add it?');
+  }
+  if (validation.invalidClosedVocabulary) {
+    return missingFieldEnvelope_(validation.field, 'What is the ' + validation.field + '? Must be one of the recognized states.', row);
+  }
+  return missingFieldEnvelope_(validation.field, 'What is the ' + validation.field + '?', row);
 }
 
-/** STUB — see parseFinding above; same OpenAI dependency. */
-function resolveMissingField(_payload) {
-  return errorEnvelope_('not_configured', 'resolveMissingField needs an OpenAI API key — not yet configured.');
+function parseFinding(payload) {
+  try {
+    var lastRow = payload.lastRow || null;
+    var interpreted = interpretTranscript_(payload.transcript, {}, lastRow);
+    return respondForCandidateRow_(interpreted);
+  } catch (err) {
+    if (err && err.name === 'AiNotConfiguredError_') {
+      return errorEnvelope_('not_configured', 'parseFinding needs a GEMINI_API_KEY script property — not yet configured. See backend/apps-script/README.md.');
+    }
+    return errorEnvelope_('upstream_error', 'parseFinding failed: ' + String(err && err.message ? err.message : err));
+  }
+}
+
+function resolveMissingField(payload) {
+  try {
+    var pendingRowSoFar = payload.pendingRowSoFar || {};
+    var interpreted = interpretTranscript_(payload.value, pendingRowSoFar, null);
+    // Defensive: make sure the specific field being resolved actually ends up set even if
+    // Gemini's extraction of a short value (e.g. just "1.2") didn't map it to the right key —
+    // an explicit fallback assignment beats a silently-still-missing field.
+    if (interpreted[payload.field] === undefined || interpreted[payload.field] === '') {
+      interpreted[payload.field] = payload.value;
+    }
+    return respondForCandidateRow_(interpreted);
+  } catch (err) {
+    if (err && err.name === 'AiNotConfiguredError_') {
+      return errorEnvelope_('not_configured', 'resolveMissingField needs a GEMINI_API_KEY script property — not yet configured.');
+    }
+    return errorEnvelope_('upstream_error', 'resolveMissingField failed: ' + String(err && err.message ? err.message : err));
+  }
 }

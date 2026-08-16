@@ -5,7 +5,7 @@ namespace DavidsApp.Client.Services.Api;
 /// <summary>
 /// One method per action in docs/api-contract.md. Implementations POST a single JSON envelope to
 /// a single endpoint — see ApiClient. A mock implementation (tools/mock-api, hit over HTTP) lets
-/// the rest of the client be built before the real Apps Script deployment, or an OpenAI key, exist.
+/// the rest of the client be built/tested without hitting the real deployed Apps Script backend.
 /// </summary>
 public interface IApiClient
 {

@@ -60,7 +60,7 @@ both live in gitignored local config on the client and in Script Properties on t
   fresh `parseFinding` — see `docs/state-machine.md`.
 - `unknown_value` — a value was recognized but isn't in the controlled vocabulary yet; `data` carries
   enough for the client to offer a yes/no + category resolution flow via `resolveVocabulary`.
-- `error` — anything else (auth failure, validation failure, upstream OpenAI failure, etc.);
+- `error` — anything else (auth failure, validation failure, upstream Gemini failure, etc.);
   `errorCode` is a short machine-readable slug, `message` is user-facing.
 
 ## Actions
@@ -85,14 +85,15 @@ project reselection.
 **data ←** (on `confirm`) `{ pendingRow: { room, wall, pos, color, substrate, state, component, reading } }`
 (on `missing_field`) `{ field, pendingRowSoFar }`
 (on `unknown_value`) see Unknown Vocabulary shape below
-Calls `OpenAiClient.js` — **stubbed until an OpenAI key exists**, returning
-`status: "error", errorCode: "not_configured"` in the meantime.
+Calls `AiClient.js` (Google Gemini, via the Interactions API — see
+`docs/decisions/0003-gemini-instead-of-openai.md`). Returns `status: "error", errorCode:
+"not_configured"` if `GEMINI_API_KEY` isn't set.
 
 ### `resolveMissingField`
 **payload →** `{ projectId, field, value, pendingRowSoFar }`
 **data ←** same shape as `parseFinding`'s response (may itself return another `missing_field` if more
 than one field is missing — client keeps routing here until `confirm`).
-Also OpenAI-backed; stubbed until a key exists.
+Also Gemini-backed, same as `parseFinding`.
 
 ### `resolveVocabulary`
 **payload →** `{ projectId, category, rawValue, accepted, normalizedValue?, pendingRowSoFar }`
@@ -105,7 +106,7 @@ left unset and `message` prompts for a replacement value.
 **data ←** `{ pendingRow: { ... } }` — the finding continues from where it left off (client passes
 `pendingRowSoFar` back in on the next `parseFinding`/`resolveMissingField` call the same way it does
 today, per `docs/state-machine.md`).
-Does not require OpenAI — pure Sheets read/write.
+Does not require Gemini — pure Sheets read/write.
 
 ### `saveFinding`
 **payload →** `{ projectId, row: { room, wall, pos, color, substrate, state, component, reading } }`
@@ -123,12 +124,12 @@ shorthand context. Wrapped in `LockService.getScriptLock()`.
 **payload →** `{ projectId }`
 **data ←** `{ reportUrl }` — a Drive-shareable PDF link.
 Builds a Google Doc from the `Projects` header row + `Findings` rows (grouped by Room), exports to
-PDF via `DriveApp`. Independent of the OpenAI key.
+PDF via `DriveApp`. Independent of the Gemini key.
 
 ## Error codes (non-exhaustive, extend as needed)
 
-`unauthorized`, `validation_failed`, `not_configured` (OpenAI key missing), `upstream_timeout`
-(OpenAI/UrlFetchApp), `not_found` (unknown projectId), `internal_error`.
+`unauthorized`, `validation_failed`, `not_configured` (`GEMINI_API_KEY` missing), `upstream_error`
+(Gemini/UrlFetchApp), `not_found` (unknown projectId), `internal_error`.
 
 ## Data model reference
 

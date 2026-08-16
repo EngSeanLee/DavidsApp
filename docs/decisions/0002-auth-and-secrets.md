@@ -17,7 +17,7 @@ a single-inspector tool.
   "header/param" phrasing is resolved as body-field.
 - `Auth.js` checks `apiKey` against `PropertiesService.getScriptProperties().getProperty('SHARED_SECRET')`
   before any action dispatches.
-- The OpenAI key and the shared secret are both stored only in Apps Script Script Properties
+- The Gemini key and the shared secret are both stored only in Apps Script Script Properties
   (server-side) and, on the client, in a gitignored local config file — never in source control.
 
 ## Consequences

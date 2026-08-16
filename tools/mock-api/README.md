@@ -2,7 +2,7 @@
 
 A mock of the `doPost` JSON envelope contract (see
 [`../../docs/api-contract.md`](../../docs/api-contract.md)), so the MAUI client can be built and
-tested before the real Apps Script deployment — or an OpenAI key — exist.
+tested without hitting the real deployed Apps Script backend (or Gemini quota) every time.
 
 ## Status: done
 

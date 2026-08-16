@@ -3,8 +3,8 @@
 
 /**
  * Mock of the Apps Script doPost JSON envelope contract (docs/api-contract.md), for developing
- * the MAUI client before the real backend deployment (or an OpenAI key) exist. Zero npm
- * dependencies on purpose — `node server.js` and it's running.
+ * the MAUI client without hitting the real deployed backend (or Gemini quota) every time. Zero
+ * npm dependencies on purpose — `node server.js` and it's running.
  *
  * In-memory only: state resets every time you restart the process.
  *

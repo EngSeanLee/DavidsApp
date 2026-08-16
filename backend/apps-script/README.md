@@ -3,15 +3,35 @@
 Google Apps Script backend, managed via [`clasp`](https://github.com/google/clasp). Implements the
 JSON envelope contract in [`../../docs/api-contract.md`](../../docs/api-contract.md).
 
-Not yet initialized — Phase 1 of the build plan:
+## Status: Phase 1 complete
+
+Bound to a Google Sheet + Apps Script project under `eng.lee785@gmail.com`, deployed as a Web App
+(Execute as: Me, Who has access: Anyone), schema bootstrapped, and smoke-tested end-to-end.
+
+- `Router.js`, `Auth.js`, `Sheets.js`, `Logging.js`, `Envelope.js` — routing, auth, Sheets access,
+  logging (all done)
+- `Projects.js` (`startProject`, `listProjects`), `Findings.js` (`getLastSavedRow`, `saveFinding`,
+  `deleteLastFinding`), `Vocabulary.js` (`resolveVocabulary`) — CRUD actions (all done)
+- `Findings.js`'s `parseFinding` / `resolveMissingField` — **stubbed**, need `src/OpenAiClient.js` and
+  an `OPENAI_API_KEY` script property (Phase 3, blocked on the user obtaining a key)
+- `Report.js`'s `generateReport` — **stubbed** (Phase 4)
+- `STATE` vocabulary (`Vocabulary.js`) is seeded with a **placeholder default**
+  (`Intact` / `Fair` / `Poor`) — the spec never enumerated exact values; confirm/edit before relying
+  on it for real inspections.
+
+The live deployment URL and the `SHARED_SECRET` script property value are **not committed** (this repo
+is public — see `docs/decisions/0002-auth-and-secrets.md`). Get them from the Apps Script project's
+**Deploy → Manage deployments** page and **Project Settings → Script Properties**, signed in as
+`eng.lee785@gmail.com`.
+
+## Local setup (already done once; for a second machine/dev)
 
 1. `npm install -g @google/clasp`
-2. `clasp login` (interactive, human-only — signs in as `eng.lee785@gmail.com`)
-3. `clasp create` to bind this directory to a new Apps Script + Sheets project
-4. Implement `src/Router.js`, `Auth.js`, `Projects.js`, `Findings.js`, `Vocabulary.js`, `Sheets.js`,
-   `Logging.js` (schema + CRUD actions — no OpenAI key required)
-5. `src/OpenAiClient.js` and the `parseFinding` / `resolveMissingField` handlers stay stubbed until an
-   OpenAI API key exists (Phase 3)
-6. `src/Report.js` for `generateReport` (Phase 4)
-
-See `docs/decisions/` for the auth pattern and secret-handling decisions this backend follows.
+2. `clasp login` (interactive, human-only)
+3. From this directory: `clasp pull` to sync down the bound project (scriptId is in `.clasp.json`,
+   already committed)
+4. `clasp push` after any local edit; Web App deployments are **versioned snapshots** — pushing to
+   HEAD does not update the live URL's behavior until you also edit the deployment
+   (**Deploy → Manage deployments → pencil icon → Version: New version → Deploy**)
+5. To bootstrap/re-verify the Sheets schema, run `setupSheets` (in `Sheets.js`) once from the Apps
+   Script editor's function picker — it's idempotent, safe to re-run

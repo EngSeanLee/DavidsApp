@@ -76,12 +76,21 @@ loop.
 - Re-ran the full Windows UI Automation sequence after these changes and confirmed the diagnostic
   log file's actual on-disk contents matched expectations.
 
+### Report generation UI (Phase 4, client side)
+
+- `CaptureViewModel.GenerateReportCommand` calls `generateReport` and opens the returned link via
+  a new `IUrlLauncher` interface (Core) / `MauiUrlLauncher` (MAUI, wraps `Launcher.Default`) — same
+  MAUI-free-Core pattern as `ITextToSpeechService`.
+- "Generate Report" button on `CapturePage`, disabled with a "Generating…" label while in flight.
+- 2 new tests (open-on-success, no-open-on-failure); 41 tests total.
+- Verified live against a running app: button click → real diagnostic log entry appended to disk
+  for the `generateReport` call, confirming the full path fired without crashing.
+
 ## Not yet done
 
 - Physical remote button (deferred per earlier decision)
 - Wiring the real deployed Apps Script URL (currently mock-only) — swap `ApiClientOptions` via a
   gitignored local config once needed; never hardcode the real URL/secret here (repo is public)
-- Report generation UI (backend action itself is still stubbed too — Phase 4)
 - End-to-end regression testing across the full scenario list in the build plan (build plan step 9)
 
 ## Build & test

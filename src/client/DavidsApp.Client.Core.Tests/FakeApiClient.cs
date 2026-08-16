@@ -18,6 +18,7 @@ public sealed class FakeApiClient : IApiClient
     public Func<string, string, string, bool, string?, FindingRow, ApiEnvelope<FindingResultData>>? OnResolveVocabulary { get; set; }
     public Func<string, FindingRow, ApiEnvelope<SaveFindingData>>? OnSaveFinding { get; set; }
     public Func<string, ApiEnvelope<DeleteFindingData>>? OnDeleteLastFinding { get; set; }
+    public Func<string, ApiEnvelope<ReportData>>? OnGenerateReport { get; set; }
 
     public Task<ApiEnvelope<Project>> StartProjectAsync(string testingAddress, string? testingDate, string? jobNumber, CancellationToken ct = default) =>
         throw new NotImplementedException("Not needed by CaptureStateMachine tests.");
@@ -63,6 +64,10 @@ public sealed class FakeApiClient : IApiClient
         return Task.FromResult(OnDeleteLastFinding(projectId));
     }
 
-    public Task<ApiEnvelope<ReportData>> GenerateReportAsync(string projectId, CancellationToken ct = default) =>
-        throw new NotImplementedException("Not needed by CaptureStateMachine tests.");
+    public Task<ApiEnvelope<ReportData>> GenerateReportAsync(string projectId, CancellationToken ct = default)
+    {
+        CallLog.Add("generateReport");
+        if (OnGenerateReport is null) throw new InvalidOperationException("OnGenerateReport not configured.");
+        return Task.FromResult(OnGenerateReport(projectId));
+    }
 }

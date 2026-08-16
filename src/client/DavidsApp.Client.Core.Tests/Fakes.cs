@@ -1,3 +1,4 @@
+using DavidsApp.Client.Services;
 using DavidsApp.Client.Services.Diagnostics;
 using DavidsApp.Client.Services.Speech;
 
@@ -55,6 +56,17 @@ public sealed class FakeDiagnosticLog : IDiagnosticLog
     public Task LogAsync(DiagnosticLogEntry entry, CancellationToken ct = default)
     {
         Entries.Add(entry);
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class FakeUrlLauncher : IUrlLauncher
+{
+    public List<string> OpenedUrls { get; } = new();
+
+    public Task OpenAsync(string url)
+    {
+        OpenedUrls.Add(url);
         return Task.CompletedTask;
     }
 }

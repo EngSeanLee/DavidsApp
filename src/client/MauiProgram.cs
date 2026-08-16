@@ -44,6 +44,7 @@ public static class MauiProgram
 
 		builder.Services.AddSingleton<ITextToSpeechService, MauiTextToSpeechService>();
 		builder.Services.AddSingleton<IDiagnosticLog, FileDiagnosticLog>();
+		builder.Services.AddSingleton<IUrlLauncher, MauiUrlLauncher>();
 #if ANDROID
 		builder.Services.AddSingleton<IContinuousSpeechRecognizer, AndroidContinuousSpeechRecognizer>();
 #elif WINDOWS

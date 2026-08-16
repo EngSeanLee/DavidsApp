@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DavidsApp.Client.Models;
+using DavidsApp.Client.Services;
 using DavidsApp.Client.Services.Api;
 using DavidsApp.Client.Services.Diagnostics;
 using DavidsApp.Client.Services.Speech;
@@ -24,6 +25,7 @@ public sealed partial class CaptureViewModel : ObservableObject
     private readonly IContinuousSpeechRecognizer _recognizer;
     private readonly ITextToSpeechService _tts;
     private readonly IDiagnosticLog _diagnosticLog;
+    private readonly IUrlLauncher _urlLauncher;
     private readonly ILogger<CaptureViewModel> _logger;
 
     private bool _pendingCancelConfirmation;
@@ -34,6 +36,7 @@ public sealed partial class CaptureViewModel : ObservableObject
         IContinuousSpeechRecognizer recognizer,
         ITextToSpeechService tts,
         IDiagnosticLog diagnosticLog,
+        IUrlLauncher urlLauncher,
         ILogger<CaptureViewModel> logger)
     {
         _stateMachine = stateMachine;
@@ -41,6 +44,7 @@ public sealed partial class CaptureViewModel : ObservableObject
         _recognizer = recognizer;
         _tts = tts;
         _diagnosticLog = diagnosticLog;
+        _urlLauncher = urlLauncher;
         _logger = logger;
 
         _stateMachine.StateChanged += (_, state) => RefreshFromState(state);
@@ -75,6 +79,9 @@ public sealed partial class CaptureViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool IsMicMuted { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsGeneratingReport { get; set; }
 
     public string PendingRowSummary => _stateMachine.PendingRow is { } row ? Summarize(row) : string.Empty;
 
@@ -194,6 +201,39 @@ public sealed partial class CaptureViewModel : ObservableObject
 
     [RelayCommand]
     private async Task RepeatAsync() => await SpeakAsync(string.IsNullOrEmpty(LastMessage) ? "Nothing to repeat." : LastMessage);
+
+    [RelayCommand]
+    private async Task GenerateReportAsync()
+    {
+        var projectId = _stateMachine.ActiveProjectId;
+        if (projectId is null || IsGeneratingReport) return;
+
+        IsGeneratingReport = true;
+        try
+        {
+            var envelope = await _api.GenerateReportAsync(projectId);
+            LastMessage = envelope.Message;
+            await LogDiagnosticAsync("api_call", action: "generateReport", status: envelope.Status.ToString(), errorCode: envelope.ErrorCode, message: envelope.Message);
+
+            if (envelope.Status == ApiStatus.Confirm && !string.IsNullOrEmpty(envelope.Data?.ReportUrl))
+            {
+                await _urlLauncher.OpenAsync(envelope.Data.ReportUrl);
+            }
+            else
+            {
+                await SpeakAsync(string.IsNullOrEmpty(LastMessage) ? "Couldn't generate the report." : LastMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "generateReport failed");
+            LastMessage = "Couldn't generate the report.";
+        }
+        finally
+        {
+            IsGeneratingReport = false;
+        }
+    }
 
     /// <summary>
     /// The single entry point for anything that could be a transcript — real speech or the

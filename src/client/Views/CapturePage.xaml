@@ -46,6 +46,15 @@
 
             <Button Text="Delete Last Finding" Command="{Binding DeleteLastCommand}" />
 
+            <Button Text="Generate Report" Command="{Binding GenerateReportCommand}">
+                <Button.Triggers>
+                    <DataTrigger TargetType="Button" Binding="{Binding IsGeneratingReport}" Value="True">
+                        <Setter Property="Text" Value="Generating…" />
+                        <Setter Property="IsEnabled" Value="False" />
+                    </DataTrigger>
+                </Button.Triggers>
+            </Button>
+
             <BoxView HeightRequest="1" Color="LightGray" Margin="0,10" />
 
             <Label Text="Manual entry (speech fallback)" FontSize="12" TextColor="Gray" />

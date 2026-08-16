@@ -8,15 +8,16 @@ namespace DavidsApp.Client.Core.Tests;
 
 public class CaptureViewModelTests
 {
-    private static (CaptureViewModel vm, FakeApiClient api, FakeSpeechRecognizer recognizer, FakeTextToSpeechService tts, FakeDiagnosticLog log) Make()
+    private static (CaptureViewModel vm, FakeApiClient api, FakeSpeechRecognizer recognizer, FakeTextToSpeechService tts, FakeDiagnosticLog log, FakeUrlLauncher launcher) Make()
     {
         var api = new FakeApiClient();
         var stateMachine = new CaptureStateMachine(api);
         var recognizer = new FakeSpeechRecognizer();
         var tts = new FakeTextToSpeechService();
         var log = new FakeDiagnosticLog();
-        var vm = new CaptureViewModel(stateMachine, api, recognizer, tts, log, NullLogger<CaptureViewModel>.Instance);
-        return (vm, api, recognizer, tts, log);
+        var launcher = new FakeUrlLauncher();
+        var vm = new CaptureViewModel(stateMachine, api, recognizer, tts, log, launcher, NullLogger<CaptureViewModel>.Instance);
+        return (vm, api, recognizer, tts, log, launcher);
     }
 
     /// <summary>
@@ -28,7 +29,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task InitializeAsync_recognizer_start_failure_degrades_gracefully_instead_of_throwing()
     {
-        var (vm, _, recognizer, _, _) = Make();
+        var (vm, _, recognizer, _, _, _) = Make();
         recognizer.ThrowOnStart = true;
 
         var exception = await Record.ExceptionAsync(() => vm.InitializeAsync("proj-1"));
@@ -41,7 +42,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task InitializeAsync_happy_path_starts_listening()
     {
-        var (vm, _, recognizer, _, _) = Make();
+        var (vm, _, recognizer, _, _, _) = Make();
 
         await vm.InitializeAsync("proj-1");
 
@@ -52,7 +53,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Raw_transcript_is_diagnostic_logged_before_processing()
     {
-        var (vm, api, recognizer, _, log) = Make();
+        var (vm, api, recognizer, _, log, _) = Make();
         api.OnParseFinding = (_, _, _) => new ApiEnvelope<FindingResultData>
         {
             Status = ApiStatus.Confirm,
@@ -71,7 +72,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Voice_pause_command_mutes_recognizer_without_reaching_state_machine()
     {
-        var (vm, api, recognizer, tts, _) = Make();
+        var (vm, api, recognizer, tts, _, _) = Make();
         api.OnParseFinding = (_, _, _) => throw new InvalidOperationException("parseFinding should not be called for a command word.");
         await vm.InitializeAsync("proj-1");
 
@@ -85,7 +86,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Manual_entry_and_voice_share_the_same_routing_pipeline()
     {
-        var (vm, api, _, _, _) = Make();
+        var (vm, api, _, _, _, _) = Make();
         var parseFindingCalls = 0;
         api.OnParseFinding = (_, transcript, _) =>
         {
@@ -110,7 +111,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Cancel_command_requires_confirmation_when_pendingRow_is_populated()
     {
-        var (vm, api, recognizer, tts, _) = Make();
+        var (vm, api, recognizer, tts, _, _) = Make();
         api.OnParseFinding = (_, _, _) => new ApiEnvelope<FindingResultData>
         {
             Status = ApiStatus.Confirm,
@@ -128,6 +129,43 @@ public class CaptureViewModelTests
         recognizer.RaiseFinalResult("cancel");
         await WaitForAsync(() => vm.State == CaptureState.Idle);
         Assert.Contains("Discarded.", tts.Spoken);
+    }
+
+    [Fact]
+    public async Task GenerateReport_opens_the_returned_url_on_success()
+    {
+        var (vm, api, _, _, log, launcher) = Make();
+        api.OnGenerateReport = _ => new ApiEnvelope<ReportData>
+        {
+            Status = ApiStatus.Confirm,
+            Data = new ReportData { ReportUrl = "https://drive.google.com/file/d/abc123/view" },
+            Message = "Report generated for 123 Main St.",
+        };
+        await vm.InitializeAsync("proj-1");
+
+        await vm.GenerateReportCommand.ExecuteAsync(null);
+
+        Assert.Equal(["https://drive.google.com/file/d/abc123/view"], launcher.OpenedUrls);
+        Assert.False(vm.IsGeneratingReport);
+        Assert.Contains(log.Entries, e => e.Action == "generateReport" && e.Status == "Confirm");
+    }
+
+    [Fact]
+    public async Task GenerateReport_failure_does_not_open_a_url()
+    {
+        var (vm, api, _, _, _, launcher) = Make();
+        api.OnGenerateReport = _ => new ApiEnvelope<ReportData>
+        {
+            Status = ApiStatus.Error,
+            ErrorCode = "not_found",
+            Message = "Unknown projectId.",
+        };
+        await vm.InitializeAsync("proj-1");
+
+        await vm.GenerateReportCommand.ExecuteAsync(null);
+
+        Assert.Empty(launcher.OpenedUrls);
+        Assert.Equal("Unknown projectId.", vm.LastMessage);
     }
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 1000)

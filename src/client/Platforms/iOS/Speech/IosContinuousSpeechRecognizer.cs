@@ -172,7 +172,7 @@ public sealed class IosContinuousSpeechRecognizer : IContinuousSpeechRecognizer
         {
             _task?.Cancel();
             _request?.EndAudio();
-            if (_audioEngine is { IsRunning: true })
+            if (_audioEngine is { Running: true })
             {
                 _audioEngine.Stop();
                 _audioEngine.InputNode.RemoveTapOnBus(0);

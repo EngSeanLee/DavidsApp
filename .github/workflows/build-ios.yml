@@ -1,0 +1,70 @@
+name: Build iOS IPA
+
+# Builds an UNSIGNED iOS .ipa on a GitHub-hosted macOS runner, since producing an iOS build
+# requires a Mac and none was available where this app was developed. The resulting IPA is not
+# signed for any device — that's intentional: the user has a free (non-paid) Apple ID, so signing
+# happens on their own machine via a tool like Sideloadly, using their own Apple ID, which this
+# workflow has no access to and never needs. See docs/decisions/0004-ios-via-github-actions.md.
+#
+# NOT verified end-to-end as of the commit that added this file — first real run's Actions log is
+# the actual test.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/client/**"
+      - ".github/workflows/build-ios.yml"
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install iOS workload
+        run: dotnet workload install ios
+
+      - name: Restore workloads for the project
+        working-directory: src/client
+        run: dotnet workload restore DavidsApp.Client.csproj
+
+      - name: Build unsigned iOS app bundle
+        working-directory: src/client
+        run: |
+          dotnet build DavidsApp.Client.csproj \
+            -f net10.0-ios \
+            -c Release \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:CodesignKey="" \
+            -p:CodesignProvision="" \
+            -p:BuildIpa=false
+
+      - name: Package unsigned IPA (Payload/App.app.zip — the format Sideloadly/AltStore expect)
+        working-directory: src/client
+        run: |
+          APP_DIR=$(find bin/Release/net10.0-ios -maxdepth 2 -iname "*.app" | head -1)
+          if [ -z "$APP_DIR" ]; then
+            echo "No .app bundle found under bin/Release/net10.0-ios — build likely failed."
+            echo "Listing bin/ for debugging:"
+            find bin -maxdepth 4
+            exit 1
+          fi
+          echo "Found app bundle: $APP_DIR"
+          mkdir -p ipa-root/Payload
+          cp -r "$APP_DIR" ipa-root/Payload/
+          (cd ipa-root && zip -r ../DavidsApp.ipa Payload)
+          ls -la DavidsApp.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DavidsApp-unsigned-ipa
+          path: src/client/DavidsApp.ipa
+          retention-days: 14

@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 
 #if ANDROID
 using DavidsApp.Client.Platforms.Android.Speech;
+#elif IOS
+using DavidsApp.Client.Platforms.iOS.Speech;
 #elif WINDOWS
 using DavidsApp.Client.Platforms.Windows.Speech;
 #endif
@@ -34,23 +36,29 @@ public static class MauiProgram
 		builder.Logging.AddDebug();
 #endif
 
-		// Phase 2 default: points at tools/mock-api so a fresh checkout runs against something
-		// out of the box (see ApiClientOptions). Swapping to the real deployed Apps Script Web
-		// App URL + shared secret is a later step — never hardcode those here (see
-		// docs/decisions/0002-auth-and-secrets.md).
-		builder.Services.AddSingleton(new ApiClientOptions());
+		// Defaults to tools/mock-api so a fresh checkout runs against something out of the box.
+		// LocalConfigLoader overrides this from a gitignored Resources/Raw/appsettings.local.json
+		// if one was bundled into this build — that's how a real deployment URL + shared secret
+		// get in without ever touching source control (see docs/decisions/0002-auth-and-secrets.md).
+		// One blocking async call at startup, before the UI/message loop exists — safe here, not
+		// a pattern to repeat once the app is running.
+		var apiClientOptions = LocalConfigLoader.LoadAsync().GetAwaiter().GetResult();
+		builder.Services.AddSingleton(apiClientOptions);
 		builder.Services.AddHttpClient<IApiClient, ApiClient>();
 		builder.Services.AddTransient<CaptureStateMachine>();
 
 		builder.Services.AddSingleton<ITextToSpeechService, MauiTextToSpeechService>();
 		builder.Services.AddSingleton<IDiagnosticLog, FileDiagnosticLog>();
 		builder.Services.AddSingleton<IUrlLauncher, MauiUrlLauncher>();
+		builder.Services.AddSingleton<IPermissionRequester, MauiPermissionRequester>();
 #if ANDROID
 		builder.Services.AddSingleton<IContinuousSpeechRecognizer, AndroidContinuousSpeechRecognizer>();
+#elif IOS
+		builder.Services.AddSingleton<IContinuousSpeechRecognizer, IosContinuousSpeechRecognizer>();
 #elif WINDOWS
 		builder.Services.AddSingleton<IContinuousSpeechRecognizer, WindowsContinuousSpeechRecognizer>();
 #else
-		throw new PlatformNotSupportedException("No IContinuousSpeechRecognizer implementation for this target — only Android and Windows are supported (see the build spec).");
+		throw new PlatformNotSupportedException("No IContinuousSpeechRecognizer implementation for this target — only Android, iOS, and Windows are supported (see the build spec).");
 #endif
 
 		builder.Services.AddTransient<ProjectListViewModel>();

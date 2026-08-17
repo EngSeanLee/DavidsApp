@@ -8,7 +8,7 @@ namespace DavidsApp.Client.Core.Tests;
 
 public class CaptureViewModelTests
 {
-    private static (CaptureViewModel vm, FakeApiClient api, FakeSpeechRecognizer recognizer, FakeTextToSpeechService tts, FakeDiagnosticLog log, FakeUrlLauncher launcher) Make()
+    private static (CaptureViewModel vm, FakeApiClient api, FakeSpeechRecognizer recognizer, FakeTextToSpeechService tts, FakeDiagnosticLog log, FakeUrlLauncher launcher, FakePermissionRequester permissions) Make()
     {
         var api = new FakeApiClient();
         var stateMachine = new CaptureStateMachine(api);
@@ -16,8 +16,9 @@ public class CaptureViewModelTests
         var tts = new FakeTextToSpeechService();
         var log = new FakeDiagnosticLog();
         var launcher = new FakeUrlLauncher();
-        var vm = new CaptureViewModel(stateMachine, api, recognizer, tts, log, launcher, NullLogger<CaptureViewModel>.Instance);
-        return (vm, api, recognizer, tts, log, launcher);
+        var permissions = new FakePermissionRequester();
+        var vm = new CaptureViewModel(stateMachine, api, recognizer, tts, log, launcher, permissions, NullLogger<CaptureViewModel>.Instance);
+        return (vm, api, recognizer, tts, log, launcher, permissions);
     }
 
     /// <summary>
@@ -29,7 +30,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task InitializeAsync_recognizer_start_failure_degrades_gracefully_instead_of_throwing()
     {
-        var (vm, _, recognizer, _, _, _) = Make();
+        var (vm, _, recognizer, _, _, _, _) = Make();
         recognizer.ThrowOnStart = true;
 
         var exception = await Record.ExceptionAsync(() => vm.InitializeAsync("proj-1"));
@@ -42,7 +43,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task InitializeAsync_happy_path_starts_listening()
     {
-        var (vm, _, recognizer, _, _, _) = Make();
+        var (vm, _, recognizer, _, _, _, _) = Make();
 
         await vm.InitializeAsync("proj-1");
 
@@ -50,10 +51,29 @@ public class CaptureViewModelTests
         Assert.Equal(SpeechStateIndicator.Ready, vm.StatusIndicator);
     }
 
+    /// <summary>
+    /// Regression guard for a real gap found before first real-device testing: nothing previously
+    /// requested the Android RECORD_AUDIO runtime permission anywhere, so the mic would silently
+    /// never work even with the manifest entry present. This confirms the app now asks, and
+    /// degrades to manual entry (not a crash, not a silent no-op) when denied.
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_microphone_permission_denied_degrades_without_starting_recognizer()
+    {
+        var (vm, _, recognizer, _, _, _, permissions) = Make();
+        permissions.MicrophoneGranted = false;
+
+        await vm.InitializeAsync("proj-1");
+
+        Assert.False(recognizer.IsListening);
+        Assert.Equal(SpeechStateIndicator.SpeechFailed, vm.StatusIndicator);
+        Assert.Contains("manually", vm.LastMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Raw_transcript_is_diagnostic_logged_before_processing()
     {
-        var (vm, api, recognizer, _, log, _) = Make();
+        var (vm, api, recognizer, _, log, _, _) = Make();
         api.OnParseFinding = (_, _, _) => new ApiEnvelope<FindingResultData>
         {
             Status = ApiStatus.Confirm,
@@ -72,7 +92,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Voice_pause_command_mutes_recognizer_without_reaching_state_machine()
     {
-        var (vm, api, recognizer, tts, _, _) = Make();
+        var (vm, api, recognizer, tts, _, _, _) = Make();
         api.OnParseFinding = (_, _, _) => throw new InvalidOperationException("parseFinding should not be called for a command word.");
         await vm.InitializeAsync("proj-1");
 
@@ -86,7 +106,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Manual_entry_and_voice_share_the_same_routing_pipeline()
     {
-        var (vm, api, _, _, _, _) = Make();
+        var (vm, api, _, _, _, _, _) = Make();
         var parseFindingCalls = 0;
         api.OnParseFinding = (_, transcript, _) =>
         {
@@ -111,7 +131,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task Cancel_command_requires_confirmation_when_pendingRow_is_populated()
     {
-        var (vm, api, recognizer, tts, _, _) = Make();
+        var (vm, api, recognizer, tts, _, _, _) = Make();
         api.OnParseFinding = (_, _, _) => new ApiEnvelope<FindingResultData>
         {
             Status = ApiStatus.Confirm,
@@ -134,7 +154,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task GenerateReport_opens_the_returned_url_on_success()
     {
-        var (vm, api, _, _, log, launcher) = Make();
+        var (vm, api, _, _, log, launcher, _) = Make();
         api.OnGenerateReport = _ => new ApiEnvelope<ReportData>
         {
             Status = ApiStatus.Confirm,
@@ -153,7 +173,7 @@ public class CaptureViewModelTests
     [Fact]
     public async Task GenerateReport_failure_does_not_open_a_url()
     {
-        var (vm, api, _, _, _, launcher) = Make();
+        var (vm, api, _, _, _, launcher, _) = Make();
         api.OnGenerateReport = _ => new ApiEnvelope<ReportData>
         {
             Status = ApiStatus.Error,

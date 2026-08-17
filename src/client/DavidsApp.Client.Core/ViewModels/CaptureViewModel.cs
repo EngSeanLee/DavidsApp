@@ -26,6 +26,7 @@ public sealed partial class CaptureViewModel : ObservableObject
     private readonly ITextToSpeechService _tts;
     private readonly IDiagnosticLog _diagnosticLog;
     private readonly IUrlLauncher _urlLauncher;
+    private readonly IPermissionRequester _permissionRequester;
     private readonly ILogger<CaptureViewModel> _logger;
 
     private bool _pendingCancelConfirmation;
@@ -37,6 +38,7 @@ public sealed partial class CaptureViewModel : ObservableObject
         ITextToSpeechService tts,
         IDiagnosticLog diagnosticLog,
         IUrlLauncher urlLauncher,
+        IPermissionRequester permissionRequester,
         ILogger<CaptureViewModel> logger)
     {
         _stateMachine = stateMachine;
@@ -45,6 +47,7 @@ public sealed partial class CaptureViewModel : ObservableObject
         _tts = tts;
         _diagnosticLog = diagnosticLog;
         _urlLauncher = urlLauncher;
+        _permissionRequester = permissionRequester;
         _logger = logger;
 
         _stateMachine.StateChanged += (_, state) => RefreshFromState(state);
@@ -118,6 +121,15 @@ public sealed partial class CaptureViewModel : ObservableObject
         // called from a page's `async void OnAppearing`, is fatal to the whole process.
         try
         {
+            var micGranted = await _permissionRequester.RequestMicrophoneAsync();
+            if (!micGranted)
+            {
+                _logger.LogWarning("Microphone permission not granted; continuing with manual entry only.");
+                StatusIndicator = SpeechStateIndicator.SpeechFailed;
+                LastMessage = "Microphone permission is off, so voice capture can't run. You can still type findings manually — or grant the permission in this device's Settings and reopen the project.";
+                return;
+            }
+
             await _recognizer.StartListeningAsync(ct);
             StatusIndicator = SpeechStateIndicator.Ready;
         }

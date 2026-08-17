@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<!-- Android primary (field device), Windows for dev/testing — per the build spec. No
-		     iOS/macCatalyst target: not part of the spec and we have no Mac to test on. -->
-		<TargetFrameworks>net10.0-android</TargetFrameworks>
+		<!-- Android primary (field device) and Windows (dev/testing) per the original spec; iOS
+		     added after the fact once the actual test device turned out to be an iPhone — built
+		     via a GitHub Actions macOS runner (.github/workflows/build-ios.yml), not locally, since
+		     this machine can't build iOS itself. No macCatalyst — nothing targets it. -->
+		<TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
 		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
 
 		<OutputType>Exe</OutputType>

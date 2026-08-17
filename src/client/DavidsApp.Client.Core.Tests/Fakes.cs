@@ -70,3 +70,11 @@ public sealed class FakeUrlLauncher : IUrlLauncher
         return Task.CompletedTask;
     }
 }
+
+public sealed class FakePermissionRequester : IPermissionRequester
+{
+    /// <summary>Defaults to granted so existing tests don't all need to opt in explicitly.</summary>
+    public bool MicrophoneGranted { get; set; } = true;
+
+    public Task<bool> RequestMicrophoneAsync() => Task.FromResult(MicrophoneGranted);
+}

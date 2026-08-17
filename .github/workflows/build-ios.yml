@@ -78,6 +78,8 @@ jobs:
             -p:RuntimeIdentifier=ios-arm64 \
             -p:CodesignKey="DavidsApp CI Adhoc" \
             -p:CodesignProvision="" \
+            -p:CodesignRequireProvisioningProfile=false \
+            -p:CodesignEntitlements="" \
             -p:BuildIpa=false
 
       - name: Package unsigned IPA (Payload/App.app.zip — the format Sideloadly/AltStore expect)

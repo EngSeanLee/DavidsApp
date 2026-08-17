@@ -7,7 +7,13 @@ function projectRowToEnvelope_(row) {
     projectId: row['ProjectID'],
     testingAddress: row['Testing Address'],
     testingDate: row['Testing Date'],
-    jobNumber: row['Job Number'],
+    // Sheets auto-detects a purely-numeric cell as a Number on read regardless of how it was
+    // written (e.g. Job Number "1234"), which JSON.stringify then emits as an unquoted number.
+    // The client's JobNumber is a string? — System.Text.Json won't coerce a JSON number into a
+    // string, so an un-normalized value here crashed the app on listProjects with
+    // JsonException: DeserializeUnableToConvertValue at $.data.projects[0].jobNumber. Force it
+    // back to a string (or '' for null/undefined) so the wire type is always consistent.
+    jobNumber: row['Job Number'] === null || row['Job Number'] === undefined ? '' : String(row['Job Number']),
     startTime: row['Start Time'],
     stopTime: row['Stop Time'] || null,
     createdOn: row['Created On'],

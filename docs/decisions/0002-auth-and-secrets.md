@@ -10,7 +10,17 @@ a single-inspector tool.
 
 ## Decision
 
-- Deploy the Web App as **Execute as: Me, Who has access: Anyone**.
+- Deploy the Web App as **Execute as: Me, Who has access: Anyone**. In `appsscript.json`, that's
+  `"webapp": {"executeAs": "USER_DEPLOYING", "access": "ANYONE_ANONYMOUS"}` — **not** `"ANYONE"`,
+  which despite the name still requires a signed-in Google session and returns 401 to a plain
+  client. This bit us for real: `clasp deploy` against a `--deploymentId` originally created via the
+  Apps Script UI silently dropped the deployment's Web App entry point entirely (confirmed via the
+  Apps Script API — `deployments.get` came back with no `entryPoints` at all), because those
+  settings live in the manifest for API-driven deploys, not carried over from whatever the UI had
+  configured. The live app was down (generic Drive "unable to open the file" page, i.e. no route at
+  all) for the several minutes it took to notice, add the `webapp` block above, and redeploy.
+  **Any future `clasp deploy` must keep this block in `appsscript.json`** — without it, the next
+  redeploy silently un-publishes the Web App the same way.
 - Every request body carries a shared-secret value in a top-level `apiKey` field (see
   `docs/api-contract.md`). **Not a header** — Apps Script's `doPost(e)` does not expose custom HTTP
   headers, only `e.parameter` / `e.postData.contents` / `e.queryString`, so the original spec's

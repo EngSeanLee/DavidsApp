@@ -69,6 +69,24 @@ jobs:
           echo "Identities visible to codesign after import:"
           security find-identity -v -p codesigning ci.keychain
 
+      # Resources/Raw/appsettings.local.json is gitignored (real backend URL + shared secret, see
+      # docs/decisions/0002-auth-and-secrets.md) so a plain checkout never has it — the first IPA
+      # built here silently fell back to the mock-API default (http://localhost:4127/, unreachable
+      # from a real phone) and hung forever "loading". Write it here from encrypted Actions secrets
+      # instead, scoped to this run only, never committed.
+      - name: Write local backend config from secrets
+        working-directory: src/client
+        env:
+          BASE_URL: ${{ secrets.DAVIDSAPP_BASE_URL }}
+          API_KEY: ${{ secrets.DAVIDSAPP_API_KEY }}
+        run: |
+          python3 -c '
+          import json, os
+          config = {"BaseUrl": os.environ["BASE_URL"], "ApiKey": os.environ["API_KEY"]}
+          with open("Resources/Raw/appsettings.local.json", "w") as f:
+              json.dump(config, f)
+          '
+
       - name: Build unsigned iOS app bundle
         working-directory: src/client
         run: |

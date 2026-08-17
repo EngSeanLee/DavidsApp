@@ -58,7 +58,10 @@ jobs:
           openssl req -x509 -newkey rsa:2048 -keyout ci-key.pem -out ci-cert.pem \
             -days 365 -nodes -subj "/CN=DavidsApp CI Adhoc/" \
             -extensions v3_codesign -config codesign-ext.cnf
-          openssl pkcs12 -export -out ci-cert.p12 -inkey ci-key.pem -in ci-cert.pem -passout pass:actions
+          # -legacy: OpenSSL 3.x defaults to AES-256/SHA-256 PKCS12 encryption, which macOS's
+          # keychain importer (older libsecurity-based PKCS12 parser) can't read — fails with
+          # "MAC verification failed (wrong password?)" even though the password is correct.
+          openssl pkcs12 -export -legacy -out ci-cert.p12 -inkey ci-key.pem -in ci-cert.pem -passout pass:actions
 
           security import ci-cert.p12 -k ci.keychain -P actions -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions ci.keychain

@@ -75,7 +75,12 @@ public sealed class ApiClient : IApiClient
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "{Action} failed", action);
-            return ErrorEnvelope<TData>("network_error", "Couldn't reach the server. Check your connection and try again.");
+            // Temporarily includes the real exception (type + message + target URL) in the
+            // user-visible message instead of a generic "check your connection" — there's no
+            // console/device-log access when debugging a sideloaded build in the field, so this is
+            // the only channel available to see what's actually failing. Revert to a friendlier
+            // message once the underlying cause is confirmed fixed.
+            return ErrorEnvelope<TData>("network_error", $"Couldn't reach {_options.BaseUrl} — {ex.GetType().Name}: {ex.Message}");
         }
     }
 

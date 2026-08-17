@@ -30,12 +30,18 @@ original plan.
   a push touching `src/client/**`.
 - The user has a free Apple ID, not a paid Apple Developer Program membership ($99/year). Ad-hoc/
   TestFlight distribution needs a paid account, so that path isn't available. Instead:
-  1. The CI workflow builds an **unsigned** `.app` (codesigning explicitly disabled via
-     `-p:CodesignKey=""` and `-p:CodesignProvision=""`), then manually zips it into an IPA-shaped
-     archive (`Payload/App.app` inside a `.zip` renamed `.ipa`) — this is the input format tools
-     like **Sideloadly** and AltStore expect for self-signing, and is a more CI-reliable path than
-     trying to get .NET's own `BuildIpa`/`ArchiveOnBuild` MSBuild targets to produce a real signed
-     archive without valid Apple credentials in the pipeline.
+  1. The CI workflow builds a **throwaway-signed** `.app`. Empty `CodesignKey`/`CodesignProvision`
+     turned out not to skip signing — the .NET-for-iOS device-RID build pipeline hard-fails before
+     it even reaches the codesign step if the keychain contains zero codesigning identities
+     ("No valid iOS code signing keys found in keychain"), verified against the first real Actions
+     run. Since Sideloadly fully strips and replaces whatever signature CI produces anyway, the fix
+     is a throwaway self-signed identity generated and imported into the runner's keychain at build
+     time (openssl → `security import`), just to satisfy that gate — not a real Apple-issued cert.
+     The resulting `.app` is then manually zipped into an IPA-shaped archive (`Payload/App.app`
+     inside a `.zip` renamed `.ipa`) — this is the input format tools like **Sideloadly** and
+     AltStore expect for self-signing, and is a more CI-reliable path than trying to get .NET's own
+     `BuildIpa`/`ArchiveOnBuild` MSBuild targets to produce a real signed archive without valid
+     Apple credentials in the pipeline.
   2. The user downloads that IPA from the Actions run and signs + installs it themselves via
      Sideloadly (runs on Windows too) using their own Apple ID — Claude never sees or handles
      those credentials, matching the "never enter passwords" rule regardless of whose account.

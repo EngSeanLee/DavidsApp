@@ -35,6 +35,37 @@ jobs:
         working-directory: src/client
         run: dotnet workload restore DavidsApp.Client.csproj
 
+      # A device-RID iOS build refuses to run at all unless the keychain contains AT LEAST ONE
+      # codesigning identity — CodesignKey="" doesn't skip that check, it just fails to find one
+      # ("No valid iOS code signing keys found in keychain"). We have no paid Apple Developer
+      # account to get a real one, but it doesn't matter: whatever CI signs with here gets fully
+      # stripped and replaced by Sideloadly using the user's own free Apple ID at install time.
+      # So we only need a throwaway self-signed identity to satisfy this build-time gate — not a
+      # real Apple-issued certificate.
+      - name: Create throwaway self-signed codesigning identity
+        run: |
+          security create-keychain -p actions ci.keychain
+          security set-keychain-settings -t 3600 -u ci.keychain
+          security unlock-keychain -p actions ci.keychain
+          security list-keychains -d user -s ci.keychain $(security list-keychains -d user | sed 's/"//g')
+
+          cat > codesign-ext.cnf <<'EOF'
+          [ v3_codesign ]
+          keyUsage = digitalSignature
+          extendedKeyUsage = codeSigning
+          EOF
+
+          openssl req -x509 -newkey rsa:2048 -keyout ci-key.pem -out ci-cert.pem \
+            -days 365 -nodes -subj "/CN=DavidsApp CI Adhoc/" \
+            -extensions v3_codesign -config codesign-ext.cnf
+          openssl pkcs12 -export -out ci-cert.p12 -inkey ci-key.pem -in ci-cert.pem -passout pass:actions
+
+          security import ci-cert.p12 -k ci.keychain -P actions -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions ci.keychain
+
+          echo "Identities visible to codesign after import:"
+          security find-identity -v -p codesigning ci.keychain
+
       - name: Build unsigned iOS app bundle
         working-directory: src/client
         run: |
@@ -42,7 +73,7 @@ jobs:
             -f net10.0-ios \
             -c Release \
             -p:RuntimeIdentifier=ios-arm64 \
-            -p:CodesignKey="" \
+            -p:CodesignKey="DavidsApp CI Adhoc" \
             -p:CodesignProvision="" \
             -p:BuildIpa=false
 

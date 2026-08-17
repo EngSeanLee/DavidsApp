@@ -1,6 +1,7 @@
 # 0004 — iOS target, built via GitHub Actions (not locally)
 
-**Status:** decided, unverified end-to-end
+**Status:** verified — CI produces a real unsigned .app/.ipa. Sideloadly install itself (the
+user's own machine, their own Apple ID) is still unverified, as it always will be from here.
 
 ## Context
 
@@ -51,14 +52,24 @@ original plan.
 
 ## Consequences
 
-- **Nothing here has been verified end-to-end.** The iOS speech recognizer has never compiled (no
-  Mac, no iOS workload, available locally), and the GitHub Actions workflow has never run. The
-  first real Actions run's log is the actual test of whether the exact MSBuild property names/
-  workload-install steps are correct — expect to iterate based on what that run's failure (if any)
-  actually says, the same way the Gemini integration (0003) needed several rounds against real
-  responses rather than getting the shape right on the first guess.
-- A device build without valid signing is exactly the scenario `CodesignKey=""` /
-  `CodesignProvision=""` are meant for, but the .NET-for-iOS toolchain's exact behavior here across
-  SDK versions isn't something either party could confirm without actually running it.
+- **Verified 2026-08-16, five Actions runs to get a clean build**, each failure real and specific,
+  not guessed away in advance:
+  1. `CodesignKey=""`/`CodesignProvision=""` do **not** disable signing — a device-RID build hard-
+     fails before reaching codesign if the keychain has zero codesigning identities at all
+     ("No valid iOS code signing keys found in keychain"). Fixed by generating a throwaway self-
+     signed identity in the runner's keychain at build time and pointing `CodesignKey` at it —
+     irrelevant to the final result since Sideloadly fully replaces the signature anyway.
+  2. `openssl pkcs12 -export`'s modern default (AES-256/SHA-256) isn't readable by macOS Keychain
+     Services' importer — `-legacy` fixes it.
+  3. A device build separately requires an actual provisioning profile — fixed with
+     `-p:CodesignRequireProvisioningProfile=false` plus clearing `CodesignEntitlements`.
+  4. One real C# compile error caught for the first time (`AVAudioEngine.Running`, not `IsRunning`).
+  5. Clean build, IPA packaged, artifact uploaded (19.5 MB).
+- The successful run still logs warnings ("app requests the entitlement 'keychain-access-groups'/
+  'application-identifier', but no provisioning profile has been specified") — expected and
+  harmless here, since Sideloadly discards whatever entitlements/signature CI produced and
+  generates its own from the user's real Apple ID.
+- Sideloadly install itself — on the user's own Windows machine, with their own Apple ID — is the
+  one part of this pipeline that can't be verified from here at all.
 - Every 7 days, the sideloaded app stops opening until re-signed — this is Apple's platform rule,
   not something fixable from this codebase.
